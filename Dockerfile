@@ -1,13 +1,9 @@
-FROM openjdk:17-jdk-slim
-
+FROM maven:3.8.6-openjdk-17 AS builder
 WORKDIR /app
-
-# Копируем исходный код
-COPY pom.xml .
-COPY src ./src
-
-# Собираем проект
+COPY . .
 RUN mvn clean package -DskipTests
 
-# Запускаем приложение
-CMD ["java", "-jar", "target/telegramYogaBot-1.0-SNAPSHOT-jar-with-dependencies.jar"]
+FROM openjdk:17-jre-slim
+WORKDIR /app
+COPY --from=builder /app/target/telegramYogaBot-1.0-SNAPSHOT-jar-with-dependencies.jar app.jar
+CMD ["java", "-jar", "app.jar"]
