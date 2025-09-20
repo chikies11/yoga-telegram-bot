@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: yoga-telegram-bot
+    plan: free
+    env: docker
+    region: frankfurt
+    branch: main
+    docker:
+      dockerfile: Dockerfile
+    envVars:
+      - key: BOT_TOKEN
+        fromSecret: true
+      - key: CHANNEL_ID
+        fromSecret: true
+    healthCheckPath: /
+    autoDeploy: true
