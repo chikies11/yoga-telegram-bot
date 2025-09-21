@@ -4,7 +4,6 @@ import org.telegram.telegrambots.meta.TelegramBotsApi;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 import org.telegram.telegrambots.updatesreceivers.DefaultBotSession;
 import org.telegram.telegrambots.updatesreceivers.DefaultWebhook;
-
 import static spark.Spark.*;
 
 public class WebhookServer {
@@ -15,8 +14,9 @@ public class WebhookServer {
             if (port == null || port.isEmpty()) {
                 port = "8080";
             }
+            port(Integer.parseInt(port));
 
-            // Получаем внешний URL (Render предоставляет RENDER_EXTERNAL_URL)
+            // Получаем внешний URL
             String externalUrl = System.getenv("RENDER_EXTERNAL_URL");
             if (externalUrl == null || externalUrl.isEmpty()) {
                 externalUrl = "https://your-app-name.onrender.com";
@@ -39,6 +39,12 @@ public class WebhookServer {
             YogaManagerBot bot = new YogaManagerBot();
             botsApi.registerBot(bot, botPath);
 
+            // Health check endpoint для Render
+            get("/health", (req, res) -> {
+                res.type("application/json");
+                return "{\"status\":\"ok\",\"service\":\"yoga-telegram-bot\"}";
+            });
+
             System.out.println("✅ Йога-бот успешно запущен на порту " + port);
             System.out.println("🌐 Webhook URL: " + externalUrl + "/" + botPath);
             System.out.println("⏰ Напоминания будут отправляться каждый день в 9:00");
@@ -46,6 +52,7 @@ public class WebhookServer {
         } catch (TelegramApiException e) {
             System.err.println("❌ Ошибка запуска бота: " + e.getMessage());
             e.printStackTrace();
+            System.exit(1);
         }
     }
 }

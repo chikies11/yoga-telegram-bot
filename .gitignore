@@ -23,6 +23,9 @@ logs/
 .DS_Store
 Thumbs.db
 
+# Spark java
+spark-*
+
 # Default ignored files
 /shelf/
 /workspace.xml

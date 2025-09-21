@@ -1,6 +1,7 @@
 package org.example;
 
-import org.telegram.telegrambots.bots.TelegramLongPollingBot;
+import org.telegram.telegrambots.bots.TelegramWebhookBot;
+import org.telegram.telegrambots.meta.api.methods.BotApiMethod;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.objects.Update;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.ReplyKeyboardMarkup;
@@ -13,10 +14,11 @@ import java.util.List;
 import java.util.Timer;
 import java.util.TimerTask;
 
-public class YogaManagerBot extends TelegramLongPollingBot {
+public class YogaManagerBot extends TelegramWebhookBot {
 
     private final String CHANNEL_ID;
     private final String BOT_TOKEN;
+    private final String BOT_PATH;
     private Timer reminderTimer;
 
     // Расписание занятий
@@ -34,6 +36,7 @@ public class YogaManagerBot extends TelegramLongPollingBot {
         // Получаем переменные окружения
         this.BOT_TOKEN = System.getenv("BOT_TOKEN");
         this.CHANNEL_ID = System.getenv("CHANNEL_ID");
+        this.BOT_PATH = System.getenv("BOT_PATH");
 
         // Проверяем, что переменные установлены
         if (BOT_TOKEN == null || BOT_TOKEN.isEmpty()) {
@@ -42,9 +45,13 @@ public class YogaManagerBot extends TelegramLongPollingBot {
         if (CHANNEL_ID == null || CHANNEL_ID.isEmpty()) {
             throw new IllegalStateException("❌ CHANNEL_ID не установлен! Проверьте переменные окружения.");
         }
+        if (BOT_PATH == null || BOT_PATH.isEmpty()) {
+            this.BOT_PATH = "yoga-bot";
+        }
 
         System.out.println("✅ Бот инициализирован");
         System.out.println("📢 Канал: " + CHANNEL_ID);
+        System.out.println("🌐 Webhook путь: " + BOT_PATH);
 
         startReminderScheduler();
     }
@@ -60,7 +67,12 @@ public class YogaManagerBot extends TelegramLongPollingBot {
     }
 
     @Override
-    public void onUpdateReceived(Update update) {
+    public String getBotPath() {
+        return BOT_PATH;
+    }
+
+    @Override
+    public BotApiMethod<?> onWebhookUpdateReceived(Update update) {
         try {
             if (update.hasMessage() && update.getMessage().hasText()) {
                 String messageText = update.getMessage().getText();
@@ -70,64 +82,89 @@ public class YogaManagerBot extends TelegramLongPollingBot {
 
                 switch (messageText) {
                     case "/start":
-                        sendWelcomeMessage(chatId);
-                        break;
+                        return createSendMessage(chatId, getWelcomeMessage(), createMainKeyboard());
                     case "Reminder":
-                        sendReminderInfo(chatId);
-                        break;
+                        return createSendMessage(chatId, getReminderInfo(), createMainKeyboard());
                     case "Расписание":
-                        sendFullSchedule(chatId);
-                        break;
+                        return createSendMessage(chatId, getFullScheduleText(), createMainKeyboard());
                     case "Сегодня":
-                        sendTodaySchedule(chatId);
-                        break;
+                        return createSendMessage(chatId, getTodaySchedule(), createMainKeyboard());
                     case "Завтра":
-                        sendTomorrowSchedule(chatId);
-                        break;
+                        return createSendMessage(chatId, getTomorrowScheduleForUser(), createMainKeyboard());
                     case "Тест напоминания":
-                        sendTestReminder(chatId);
-                        break;
+                        sendTestReminder();
+                        return createSendMessage(chatId, "✅ Тестовое напоминание отправлено в канал!", createMainKeyboard());
                     default:
-                        sendMessageWithKeyboard(chatId, "Выберите действие:", createMainKeyboard());
+                        return createSendMessage(chatId, "Выберите действие:", createMainKeyboard());
                 }
             }
         } catch (Exception e) {
             System.err.println("❌ Ошибка обработки сообщения: " + e.getMessage());
         }
+        return null;
     }
 
-    private void sendWelcomeMessage(long chatId) {
-        String welcomeText = "Привет, я твой помощник в планировании йога-занятий! 🧘‍♀️\n\nС чем тебе помочь?";
-        sendMessageWithKeyboard(chatId, welcomeText, createMainKeyboard());
-        System.out.println("✅ Отправлено приветствие для " + chatId);
+    private String getWelcomeMessage() {
+        return "Привет, я твой помощник в планировании йога-занятий! 🧘‍♀️\n\nС чем тебе помочь?";
     }
 
-    private void sendReminderInfo(long chatId) {
-        String info = "✅ Напоминания настроены!\n\n" +
+    private String getReminderInfo() {
+        return "✅ Напоминания настроены!\n\n" +
                 "Я буду автоматически отправлять напоминания в канал за 24 часа до занятий.\n" +
                 "Следующее напоминание: " + getNextReminderTime();
-        sendMessageWithKeyboard(chatId, info, createMainKeyboard());
     }
 
-    private void sendFullSchedule(long chatId) {
-        sendMessageWithKeyboard(chatId, "📅 Полное расписание занятий:\n\n" + getFullScheduleText(), createMainKeyboard());
+    private String getFullScheduleText() {
+        StringBuilder sb = new StringBuilder();
+        sb.append("📅 Полное расписание занятий:\n\n");
+        for (String[] day : SCHEDULE) {
+            sb.append(day[0]).append(":\n");
+            if (!day[1].isEmpty()) {
+                sb.append("• ").append(day[1]).append("\n");
+            }
+            if (!day[2].isEmpty()) {
+                sb.append("• ").append(day[2]).append("\n");
+            }
+            if (day[1].isEmpty() && day[2].isEmpty()) {
+                sb.append("• Нет занятий\n");
+            }
+            sb.append("\n");
+        }
+        return sb.toString();
     }
 
-    private void sendTodaySchedule(long chatId) {
+    private String getTodaySchedule() {
         int todayIndex = getDayOfWeekIndex(Calendar.getInstance());
         String schedule = getDaySchedule(todayIndex);
-        sendMessageWithKeyboard(chatId, "📋 Сегодня (" + SCHEDULE[todayIndex][0] + "):\n\n" + schedule, createMainKeyboard());
+        return "📋 Сегодня (" + SCHEDULE[todayIndex][0] + "):\n\n" + schedule;
     }
 
-    private void sendTomorrowSchedule(long chatId) {
+    private String getTomorrowScheduleForUser() {
         Calendar tomorrow = Calendar.getInstance();
         tomorrow.add(Calendar.DAY_OF_MONTH, 1);
         int tomorrowIndex = getDayOfWeekIndex(tomorrow);
         String schedule = getDaySchedule(tomorrowIndex);
-        sendMessageWithKeyboard(chatId, "📋 Завтра (" + SCHEDULE[tomorrowIndex][0] + "):\n\n" + schedule, createMainKeyboard());
+        return "📋 Завтра (" + SCHEDULE[tomorrowIndex][0] + "):\n\n" + schedule;
     }
 
-    private void sendTestReminder(long chatId) {
+    private String getDaySchedule(int dayIndex) {
+        String[] day = SCHEDULE[dayIndex];
+        StringBuilder sb = new StringBuilder();
+
+        if (!day[1].isEmpty() && !day[1].equals("Нет занятий")) {
+            sb.append("• ").append(day[1]).append("\n");
+        }
+        if (!day[2].isEmpty() && !day[2].equals("Нет занятий")) {
+            sb.append("• ").append(day[2]).append("\n");
+        }
+        if (sb.length() == 0) {
+            sb.append("• Нет занятий\n");
+        }
+
+        return sb.toString();
+    }
+
+    private void sendTestReminder() {
         String tomorrowSchedule = getTomorrowSchedule();
         String testReminder;
 
@@ -142,7 +179,14 @@ public class YogaManagerBot extends TelegramLongPollingBot {
         }
 
         sendMessageToChannel(testReminder);
-        sendMessageWithKeyboard(chatId, "✅ Тестовое напоминание отправлено в канал!", createMainKeyboard());
+    }
+
+    private SendMessage createSendMessage(long chatId, String text, ReplyKeyboardMarkup keyboard) {
+        SendMessage message = new SendMessage();
+        message.setChatId(String.valueOf(chatId));
+        message.setText(text);
+        message.setReplyMarkup(keyboard);
+        return message;
     }
 
     private ReplyKeyboardMarkup createMainKeyboard() {
@@ -169,41 +213,6 @@ public class YogaManagerBot extends TelegramLongPollingBot {
         keyboardMarkup.setOneTimeKeyboard(false);
 
         return keyboardMarkup;
-    }
-
-    private String getFullScheduleText() {
-        StringBuilder sb = new StringBuilder();
-        for (String[] day : SCHEDULE) {
-            sb.append(day[0]).append(":\n");
-            if (!day[1].isEmpty()) {
-                sb.append("• ").append(day[1]).append("\n");
-            }
-            if (!day[2].isEmpty()) {
-                sb.append("• ").append(day[2]).append("\n");
-            }
-            if (day[1].isEmpty() && day[2].isEmpty()) {
-                sb.append("• Нет занятий\n");
-            }
-            sb.append("\n");
-        }
-        return sb.toString();
-    }
-
-    private String getDaySchedule(int dayIndex) {
-        String[] day = SCHEDULE[dayIndex];
-        StringBuilder sb = new StringBuilder();
-
-        if (!day[1].isEmpty() && !day[1].equals("Нет занятий")) {
-            sb.append("• ").append(day[1]).append("\n");
-        }
-        if (!day[2].isEmpty() && !day[2].equals("Нет занятий")) {
-            sb.append("• ").append(day[2]).append("\n");
-        }
-        if (sb.length() == 0) {
-            sb.append("• Нет занятий\n");
-        }
-
-        return sb.toString();
     }
 
     private int getDayOfWeekIndex(Calendar calendar) {
@@ -315,19 +324,6 @@ public class YogaManagerBot extends TelegramLongPollingBot {
             System.out.println("✅ Сообщение отправлено в канал: " + text.substring(0, Math.min(50, text.length())) + "...");
         } catch (TelegramApiException e) {
             System.err.println("❌ Ошибка отправки в канал: " + e.getMessage());
-        }
-    }
-
-    private void sendMessageWithKeyboard(long chatId, String text, ReplyKeyboardMarkup keyboard) {
-        try {
-            SendMessage message = new SendMessage();
-            message.setChatId(String.valueOf(chatId));
-            message.setText(text);
-            message.setReplyMarkup(keyboard);
-
-            execute(message);
-        } catch (TelegramApiException e) {
-            System.err.println("❌ Ошибка отправки сообщения: " + e.getMessage());
         }
     }
 }
