@@ -1,7 +1,7 @@
-FROM maven:3.8.6-openjdk-11
+FROM openjdk:11-jre-slim
 
 WORKDIR /app
-COPY . .
-RUN mvn clean package -DskipTests -Dmaven.compiler.source=17 -Dmaven.compiler.target=17
 
-CMD ["java", "-jar", "target/telegramYogaBot-1.0-SNAPSHOT-jar-with-dependencies.jar"]
+COPY target/telegramYogaBot-1.0-SNAPSHOT-jar-with-dependencies.jar app.jar
+
+CMD ["java", "-jar", "app.jar"]

@@ -31,48 +31,16 @@ public class YogaManagerBot extends TelegramLongPollingBot {
     };
 
     public YogaManagerBot() {
-        // Сначала пробуем получить из системных свойств
-        String botToken = System.getProperty("BOT_TOKEN");
-        String channelId = System.getProperty("CHANNEL_ID");
-
-        // Если не найдено в свойствах, пробуем получить из переменных окружения
-        if (botToken == null || botToken.isEmpty()) {
-            botToken = System.getenv("BOT_TOKEN");
-        }
-        if (channelId == null || channelId.isEmpty()) {
-            channelId = System.getenv("CHANNEL_ID");
-        }
-
-        // Теперь присваиваем final переменным
-        this.BOT_TOKEN = botToken;
-        this.CHANNEL_ID = channelId;
-
-        System.out.println("🔍 Инициализация бота...");
-        System.out.println("📋 BOT_TOKEN: " + (BOT_TOKEN != null ? "установлен" : "НЕ установлен"));
-        System.out.println("📋 CHANNEL_ID: " + (CHANNEL_ID != null ? CHANNEL_ID : "НЕ установлен"));
+        // Получаем переменные окружения
+        this.BOT_TOKEN = System.getenv("BOT_TOKEN");
+        this.CHANNEL_ID = System.getenv("CHANNEL_ID");
 
         // Проверяем, что переменные установлены
         if (BOT_TOKEN == null || BOT_TOKEN.isEmpty()) {
-            throw new IllegalStateException("""
-            ❌ BOT_TOKEN не установлен!
-            📝 Для локального запуска:
-              1. Создайте файл .env в корне проекта
-              2. Добавьте: BOT_TOKEN=ваш_токен
-              3. Добавьте: CHANNEL_ID=@ваш_канал
-            🌐 Для Render:
-              1. Добавьте переменные в Environment Variables
-            """);
+            throw new IllegalStateException("❌ BOT_TOKEN не установлен! Проверьте переменные окружения.");
         }
-
         if (CHANNEL_ID == null || CHANNEL_ID.isEmpty()) {
-            throw new IllegalStateException("""
-            ❌ CHANNEL_ID не установлен!
-            📝 Для локального запуска:
-              1. Создайте файл .env в корне проекта
-              2. Добавьте: CHANNEL_ID=@ваш_канал
-            🌐 Для Render:
-              1. Добавьте переменные в Environment Variables
-            """);
+            throw new IllegalStateException("❌ CHANNEL_ID не установлен! Проверьте переменные окружения.");
         }
 
         System.out.println("✅ Бот инициализирован");
@@ -83,7 +51,7 @@ public class YogaManagerBot extends TelegramLongPollingBot {
 
     @Override
     public String getBotUsername() {
-        return "yoga_manager_bot"; // Замените на username вашего бота
+        return "yoga_manager_bot";
     }
 
     @Override

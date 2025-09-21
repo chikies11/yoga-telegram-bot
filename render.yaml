@@ -12,5 +12,6 @@ services:
         fromSecret: true
       - key: CHANNEL_ID
         fromSecret: true
-    healthCheckPath: /
-    autoDeploy: true
+      - key: BOT_PATH
+        value: "yoga-bot-webhook"
+    healthCheckPath: /health
