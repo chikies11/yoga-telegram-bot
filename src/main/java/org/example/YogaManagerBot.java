@@ -36,17 +36,17 @@ public class YogaManagerBot extends TelegramWebhookBot {
         // Получаем переменные окружения
         this.BOT_TOKEN = System.getenv("BOT_TOKEN");
         this.CHANNEL_ID = System.getenv("CHANNEL_ID");
-        this.BOT_PATH = System.getenv("BOT_PATH");
 
-        // Проверяем, что переменные установлены
+        // Получаем BOT_PATH с значением по умолчанию
+        String botPathEnv = System.getenv("BOT_PATH");
+        this.BOT_PATH = (botPathEnv == null || botPathEnv.isEmpty()) ? "yoga-bot" : botPathEnv;
+
+        // Проверяем, что обязательные переменные установлены
         if (BOT_TOKEN == null || BOT_TOKEN.isEmpty()) {
             throw new IllegalStateException("❌ BOT_TOKEN не установлен! Проверьте переменные окружения.");
         }
         if (CHANNEL_ID == null || CHANNEL_ID.isEmpty()) {
             throw new IllegalStateException("❌ CHANNEL_ID не установлен! Проверьте переменные окружения.");
-        }
-        if (BOT_PATH == null || BOT_PATH.isEmpty()) {
-            this.BOT_PATH = "yoga-bot";
         }
 
         System.out.println("✅ Бот инициализирован");
