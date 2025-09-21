@@ -10,4 +10,4 @@ FROM openjdk:11-jre-slim
 WORKDIR /app
 COPY --from=builder /build/target/telegramYogaBot-1.0-SNAPSHOT-jar-with-dependencies.jar app.jar
 EXPOSE 8080
-CMD ["java", "-jar", "app.jar"]
+CMD ["java", "-cp", "app.jar", "org.example.WebhookServer"]
