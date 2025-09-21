@@ -1,6 +1,7 @@
 package org.example;
 
 import org.telegram.telegrambots.meta.TelegramBotsApi;
+import org.telegram.telegrambots.meta.api.methods.updates.SetWebhook;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 import org.telegram.telegrambots.updatesreceivers.DefaultBotSession;
 import org.telegram.telegrambots.updatesreceivers.DefaultWebhook;
@@ -9,7 +10,7 @@ import static spark.Spark.*;
 public class WebhookServer {
     public static void main(String[] args) {
         try {
-            // Получаем порт из переменных окружения (Render автоматически устанавливает PORT)
+            // Получаем порт из переменных окружения
             String port = System.getenv("PORT");
             if (port == null || port.isEmpty()) {
                 port = "8080";
@@ -28,16 +29,20 @@ public class WebhookServer {
                 botPath = "yoga-bot";
             }
 
-            // Настраиваем вебхук
+            // Создаем объект SetWebhook с внешним URL
+            SetWebhook setWebhook = SetWebhook.builder()
+                    .url(externalUrl + "/" + botPath)
+                    .build();
+
+            // Настраиваем вебхук (только internal URL)
             DefaultWebhook webhook = new DefaultWebhook();
-            webhook.setInternalUrl("http://0.0.0.0:" + port + "/");
-            webhook.setExternalUrl(externalUrl + "/");
+            webhook.setInternalUrl("http://0.0.0.0:" + port);
 
             TelegramBotsApi botsApi = new TelegramBotsApi(DefaultBotSession.class, webhook);
 
-            // Регистрируем бота
+            // Регистрируем бота с объектом SetWebhook
             YogaManagerBot bot = new YogaManagerBot();
-            botsApi.registerBot(bot, botPath);
+            botsApi.registerBot(bot, setWebhook);
 
             // Health check endpoint для Render
             get("/health", (req, res) -> {
