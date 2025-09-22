@@ -1,7 +1,12 @@
 package org.example;
 
 import org.telegram.telegrambots.meta.TelegramBotsApi;
+import org.telegram.telegrambots.meta.api.methods.BotApiMethod;
 import org.telegram.telegrambots.meta.api.methods.updates.SetWebhook;
+import org.telegram.telegrambots.meta.api.objects.Chat;
+import org.telegram.telegrambots.meta.api.objects.Message;
+import org.telegram.telegrambots.meta.api.objects.Update;
+import org.telegram.telegrambots.meta.api.objects.User;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 import org.telegram.telegrambots.updatesreceivers.DefaultBotSession;
 import org.telegram.telegrambots.updatesreceivers.DefaultWebhook;
@@ -52,7 +57,33 @@ public class WebhookServer {
 
                 TelegramBotsApi botsApi = new TelegramBotsApi(DefaultBotSession.class, webhook);
 
-                // Регистрируем бота с объектом SetWebhook
+            // Регистрируем бота с объектом SetWebhook
+            YogaManagerBot bot = new YogaManagerBot();
+            botsApi.registerBot(bot, setWebhook);
+
+            System.out.println("🎯 Bot registration completed!");
+
+// Тест: создаем искусственный update для проверки
+            try {
+                System.out.println("🧪 Testing bot with mock update...");
+
+                // Создаем тестовый update
+                Update testUpdate = new Update();
+                Message testMessage = new Message();
+                testMessage.setText("/test");
+                testMessage.setChat(new Chat(123456789L, "private"));
+                testMessage.setFrom(new User(123456789L, "TestUser", false));
+                testUpdate.setMessage(testMessage);
+
+                // Пытаемся обработать
+                BotApiMethod<?> result = bot.onWebhookUpdateReceived(testUpdate);
+                System.out.println("✅ Test update processed successfully");
+
+            } catch (Exception e) {
+                System.err.println("💥 TEST FAILED: " + e.getMessage());
+                e.printStackTrace();
+            }// Регистрируем бота с объектом SetWebhook
+
                 YogaManagerBot bot = new YogaManagerBot();
                 botsApi.registerBot(bot, setWebhook);
 
@@ -66,5 +97,6 @@ public class WebhookServer {
                 e.printStackTrace();
                 System.exit(1);
             }
+
         }
     }
