@@ -558,6 +558,3 @@ public class YogaManagerBot extends TelegramLongPollingBot {
         }
     }
 }
-git add src/main/java/org/example
-git commit -m "КОРРЕКТИРОВОЧКА КНОПОК РЕДАКТИРОВАНЯ"
-git push origin main
