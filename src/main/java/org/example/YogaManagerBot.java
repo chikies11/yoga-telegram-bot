@@ -2,14 +2,23 @@ package org.example;
 
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
+import org.telegram.telegrambots.meta.api.methods.updatingmessages.EditMessageReplyMarkup;
+import org.telegram.telegrambots.meta.api.objects.CallbackQuery;
+import org.telegram.telegrambots.meta.api.objects.Message;
 import org.telegram.telegrambots.meta.api.objects.Update;
+import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.ReplyKeyboardMarkup;
+import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardButton;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.KeyboardRow;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 
 import java.util.ArrayList;
 import java.util.Calendar;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 public class YogaManagerBot extends TelegramLongPollingBot {
 
@@ -27,6 +36,11 @@ public class YogaManagerBot extends TelegramLongPollingBot {
     // Временные изменения
     private String[] todaySpecial = null;
     private String[] tomorrowSpecial = null;
+
+    // Система записи на занятия
+    private Map<String, Set<Long>> todayRegistrations = new HashMap<>();
+    private Message todayRegistrationMessage = null;
+    private boolean registrationActive = false;
 
     // Администраторы
     private final List<Long> adminUsers = List.of(639619404L);
@@ -55,6 +69,12 @@ public class YogaManagerBot extends TelegramLongPollingBot {
         System.out.println("🎯 Update received!");
 
         try {
+            // Обработка callback query (нажатие на кнопку "Записаться")
+            if (update.hasCallbackQuery()) {
+                handleCallbackQuery(update.getCallbackQuery());
+                return;
+            }
+
             if (update.hasMessage() && update.getMessage().hasText()) {
                 String messageText = update.getMessage().getText();
                 long chatId = update.getMessage().getChatId();
@@ -76,6 +96,84 @@ public class YogaManagerBot extends TelegramLongPollingBot {
         }
     }
 
+    private void handleCallbackQuery(CallbackQuery callbackQuery) throws TelegramApiException {
+        String callbackData = callbackQuery.getData();
+        long userId = callbackQuery.getFrom().getId();
+        String userName = callbackQuery.getFrom().getFirstName() + " " + callbackQuery.getFrom().getLastName();
+        if (userName.trim().isEmpty()) {
+            userName = callbackQuery.getFrom().getUserName();
+        }
+        int messageId = callbackQuery.getMessage().getMessageId();
+        long chatId = callbackQuery.getMessage().getChatId();
+
+        System.out.println("🔘 Callback: " + callbackData + " from: " + userId + " (" + userName + ")");
+
+        if (callbackData.startsWith("register_")) {
+            String className = callbackData.substring(9);
+            toggleRegistration(userId, userName, className, messageId, chatId);
+        }
+    }
+
+    private void toggleRegistration(long userId, String userName, String className, int messageId, long chatId) throws TelegramApiException {
+        // Получаем или создаем множество зарегистрированных пользователей для этого класса
+        Set<Long> registeredUsers = todayRegistrations.getOrDefault(className, new HashSet<>());
+
+        if (registeredUsers.contains(userId)) {
+            // Удаляем из списка
+            registeredUsers.remove(userId);
+            todayRegistrations.put(className, registeredUsers);
+
+            // Обновляем кнопку
+            updateRegistrationButton(messageId, chatId, className, registeredUsers.size(), false, userId);
+
+            // Уведомление пользователю
+            answerCallbackQuery("❌ Вы отменили запись на занятие: " + className, userId);
+        } else {
+            // Добавляем в список
+            registeredUsers.add(userId);
+            todayRegistrations.put(className, registeredUsers);
+
+            // Обновляем кнопку
+            updateRegistrationButton(messageId, chatId, className, registeredUsers.size(), true, userId);
+
+            // Уведомление пользователю
+            answerCallbackQuery("✅ Вы записались на занятие: " + className, userId);
+
+            // Уведомление администраторам
+            notifyAdminsAboutRegistration(userName, className, "записался");
+        }
+    }
+
+    private void updateRegistrationButton(int messageId, long chatId, String className, int count, boolean isRegistered, long userId) throws TelegramApiException {
+        InlineKeyboardMarkup keyboard = createRegistrationKeyboard(className, count, isRegistered);
+
+        EditMessageReplyMarkup editMessage = new EditMessageReplyMarkup();
+        editMessage.setChatId(String.valueOf(chatId));
+        editMessage.setMessageId(messageId);
+        editMessage.setReplyMarkup(keyboard);
+
+        execute(editMessage);
+    }
+
+    private void answerCallbackQuery(String text, long userId) throws TelegramApiException {
+        SendMessage message = new SendMessage();
+        message.setChatId(String.valueOf(userId));
+        message.setText(text);
+        execute(message);
+    }
+
+    private void notifyAdminsAboutRegistration(String userName, String className, String action) throws TelegramApiException {
+        String message = "👥 **Новая запись на занятие**\n\n" +
+                "• Пользователь: " + userName + "\n" +
+                "• Занятие: " + className + "\n" +
+                "• Действие: " + action + "\n" +
+                "• Всего записавшихся: " + todayRegistrations.get(className).size();
+
+        for (Long adminId : adminUsers) {
+            sendMessage(adminId, message);
+        }
+    }
+
     private void handleMainCommands(long chatId, String messageText) throws TelegramApiException {
         switch (messageText) {
             case "/start":
@@ -89,6 +187,22 @@ public class YogaManagerBot extends TelegramLongPollingBot {
                 break;
             case "📆 Завтра":
                 sendTomorrowSchedule(chatId);
+                break;
+            case "👥 Запись на сегодня":
+                if (isAdmin(chatId)) {
+                    showTodayRegistrations(chatId);
+                } else {
+                    sendMessage(chatId, "❌ У вас нет прав администратора");
+                    sendWelcomeMessage(chatId);
+                }
+                break;
+            case "📢 Объявить занятие":
+                if (isAdmin(chatId)) {
+                    startClassAnnouncement(chatId);
+                } else {
+                    sendMessage(chatId, "❌ У вас нет прав администратора");
+                    sendWelcomeMessage(chatId);
+                }
                 break;
             case "⚙️ Управление":
                 if (isAdmin(chatId)) {
@@ -146,14 +260,93 @@ public class YogaManagerBot extends TelegramLongPollingBot {
         String text = "⚙️ **Панель управления расписанием**\n\n" +
                 "📊 **Текущий статус:**\n" +
                 "• Сегодня: " + (todaySpecial != null ? "🔄 Изменено" : "📋 Стандартное") + "\n" +
-                "• Завтра: " + (tomorrowSpecial != null ? "🔄 Изменено" : "📋 Стандартное") + "\n\n" +
+                "• Завтра: " + (tomorrowSpecial != null ? "🔄 Изменено" : "📋 Стандартное") + "\n" +
+                "• Запись активна: " + (registrationActive ? "✅ Да" : "❌ Нет") + "\n\n" +
                 "📝 **Доступные действия:**\n" +
                 "• ✏️ Редактировать основное расписание\n" +
                 "• 🕘 Изменить расписание на сегодня\n" +
                 "• 🕘 Изменить расписание на завтра\n" +
-                "• 🔄 Сбросить временные изменения";
+                "• 🔄 Сбросить временные изменения\n" +
+                "• 👥 Просмотр записавшихся\n" +
+                "• 📢 Объявить занятие";
 
         sendMessageWithManagementKeyboard(chatId, text);
+    }
+
+    private void showTodayRegistrations(long chatId) throws TelegramApiException {
+        if (todayRegistrations.isEmpty()) {
+            sendMessage(chatId, "📊 **Запись на сегодня**\n\n" +
+                    "На текущий момент никто не записался на занятия.");
+            return;
+        }
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("📊 **Запись на сегодня**\n\n");
+
+        for (Map.Entry<String, Set<Long>> entry : todayRegistrations.entrySet()) {
+            sb.append("**").append(entry.getKey()).append("**\n");
+            sb.append("👥 Записавшихся: ").append(entry.getValue().size()).append("\n\n");
+        }
+
+        sb.append("Для просмотра деталей используйте команду просмотра записей.");
+
+        sendMessage(chatId, sb.toString());
+    }
+
+    private void startClassAnnouncement(long chatId) throws TelegramApiException {
+        // Получаем расписание на сегодня
+        int todayIndex = getDayOfWeekIndex(Calendar.getInstance());
+        String[] todaySchedule = todaySpecial != null ? todaySpecial : schedule[todayIndex];
+
+        if (todaySchedule[1].equals("ОТДЫХ")) {
+            sendMessage(chatId, "❌ Сегодня день отдыха! Нельзя объявить занятие.");
+            return;
+        }
+
+        // Создаем сообщение с кнопкой записи
+        String announcementText = "🧘‍♀️ **Объявление о занятии**\n\n" +
+                "📋 **Сегодняшнее расписание:**\n" +
+                "🕘 " + todaySchedule[1] + "\n";
+
+        if (!todaySchedule[2].isEmpty()) {
+            announcementText += "🕘 " + todaySchedule[2] + "\n";
+        }
+
+        announcementText += "\n📝 **Для записи нажмите кнопку ниже:**";
+
+        // Отправляем сообщение с кнопкой
+        SendMessage message = new SendMessage();
+        message.setChatId(String.valueOf(chatId));
+        message.setText(announcementText);
+        message.setReplyMarkup(createRegistrationKeyboard(todaySchedule[1], 0, false));
+        message.setParseMode("Markdown");
+
+        Message sentMessage = execute(message);
+        todayRegistrationMessage = sentMessage;
+        registrationActive = true;
+
+        sendMessage(chatId, "✅ Объявление о занятии успешно отправлено! Запись активна.");
+    }
+
+    private InlineKeyboardMarkup createRegistrationKeyboard(String className, int count, boolean isRegistered) {
+        InlineKeyboardMarkup keyboardMarkup = new InlineKeyboardMarkup();
+        List<List<InlineKeyboardButton>> keyboard = new ArrayList<>();
+
+        // Кнопка записи
+        InlineKeyboardButton registerButton = new InlineKeyboardButton();
+        String buttonText = isRegistered ? "✅ Записан" : "📝 Записаться";
+        if (count > 0) {
+            buttonText += " (" + count + ")";
+        }
+        registerButton.setText(buttonText);
+        registerButton.setCallbackData("register_" + className);
+
+        List<InlineKeyboardButton> row = new ArrayList<>();
+        row.add(registerButton);
+        keyboard.add(row);
+
+        keyboardMarkup.setKeyboard(keyboard);
+        return keyboardMarkup;
     }
 
     private void showScheduleEditor(long chatId) throws TelegramApiException {
@@ -348,7 +541,8 @@ public class YogaManagerBot extends TelegramLongPollingBot {
                 "• Занятия на завтра\n\n" +
                 "⚙️ **Для администраторов:**\n" +
                 "• Редактирование расписания\n" +
-                "• Временные изменения\n\n" +
+                "• Временные изменения\n" +
+                "• Запись участников на занятия\n\n" +
                 "Выберите действие ниже 👇";
 
         sendMessageWithKeyboard(chatId, text);
@@ -360,8 +554,9 @@ public class YogaManagerBot extends TelegramLongPollingBot {
                 "📋 **Функции:**\n" +
                 "• Просмотр расписания занятий\n" +
                 "• Автоматические напоминания\n" +
+                "• Система записи на занятия\n" +
                 "• Настройка расписания (администраторы)\n\n" +
-                "⚡ **Для администраторов** доступно управление расписанием.";
+                "⚡ **Для администраторов** доступно управление расписанием и записью участников.";
 
         sendMessage(chatId, text);
     }
@@ -492,7 +687,11 @@ public class YogaManagerBot extends TelegramLongPollingBot {
 
         KeyboardRow row2 = new KeyboardRow();
         row2.add("📆 Завтра");
-        row2.add("⚙️ Управление");
+        if (isAdmin(639619404L)) { // Проверяем админа для показа кнопки управления
+            row2.add("⚙️ Управление");
+        } else {
+            row2.add("ℹ️ О боте");
+        }
 
         KeyboardRow row3 = new KeyboardRow();
         row3.add("ℹ️ О боте");
@@ -521,12 +720,17 @@ public class YogaManagerBot extends TelegramLongPollingBot {
         row2.add("🔄 Сбросить изменения");
 
         KeyboardRow row3 = new KeyboardRow();
-        row3.add("⬅️ Назад");
-        row3.add("❌ Отмена");
+        row3.add("👥 Запись на сегодня");
+        row3.add("📢 Объявить занятие");
+
+        KeyboardRow row4 = new KeyboardRow();
+        row4.add("⬅️ Назад");
+        row4.add("❌ Отмена");
 
         keyboard.add(row1);
         keyboard.add(row2);
         keyboard.add(row3);
+        keyboard.add(row4);
 
         keyboardMarkup.setKeyboard(keyboard);
         keyboardMarkup.setResizeKeyboard(true);
