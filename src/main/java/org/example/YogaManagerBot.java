@@ -16,9 +16,9 @@ import java.util.TimerTask;
 
 public class YogaManagerBot extends TelegramWebhookBot {
 
-    private final String CHANNEL_ID;
-    private final String BOT_TOKEN;
-    private final String BOT_PATH;
+    private String CHANNEL_ID;
+    private String BOT_TOKEN;
+    private String BOT_PATH;
     private Timer reminderTimer;
 
     // Расписание занятий
@@ -33,27 +33,39 @@ public class YogaManagerBot extends TelegramWebhookBot {
     };
 
     public YogaManagerBot() {
-        // Получаем переменные окружения
-        this.BOT_TOKEN = System.getenv("BOT_TOKEN");
-        this.CHANNEL_ID = System.getenv("CHANNEL_ID");
+        try {
+            // Получаем переменные окружения
+            this.BOT_TOKEN = System.getenv("BOT_TOKEN");
+            this.CHANNEL_ID = System.getenv("CHANNEL_ID");
 
-        // Получаем BOT_PATH с значением по умолчанию
-        String botPathEnv = System.getenv("BOT_PATH");
-        this.BOT_PATH = (botPathEnv == null || botPathEnv.isEmpty()) ? "yoga-bot" : botPathEnv;
+            // Получаем BOT_PATH со значением по умолчанию
+            String botPathEnv = System.getenv("BOT_PATH");
+            this.BOT_PATH = (botPathEnv == null || botPathEnv.isEmpty()) ?
+                    "yoga-bot-webhook" : botPathEnv;
 
-        // Проверяем, что обязательные переменные установлены
-        if (BOT_TOKEN == null || BOT_TOKEN.isEmpty()) {
-            throw new IllegalStateException("❌ BOT_TOKEN не установлен! Проверьте переменные окружения.");
+            // Мягкая проверка переменных
+            if (BOT_TOKEN == null || BOT_TOKEN.isEmpty()) {
+                System.err.println("⚠️ WARNING: BOT_TOKEN not set");
+                // Устанавливаем заглушку для тестирования
+                this.BOT_TOKEN = "dummy-token-for-testing";
+            }
+
+            if (CHANNEL_ID == null || CHANNEL_ID.isEmpty()) {
+                System.err.println("⚠️ WARNING: CHANNEL_ID not set");
+                this.CHANNEL_ID = "@test_channel";
+            }
+
+            System.out.println("✅ Бот инициализирован");
+            System.out.println("📢 Канал: " + CHANNEL_ID);
+            System.out.println("🌐 Webhook путь: " + BOT_PATH);
+
+            startReminderScheduler();
+
+        } catch (Exception e) {
+            System.err.println("❌ Ошибка в конструкторе бота: " + e.getMessage());
+            e.printStackTrace();
+            // Не бросаем исключение, чтобы бот мог запуститься
         }
-        if (CHANNEL_ID == null || CHANNEL_ID.isEmpty()) {
-            throw new IllegalStateException("❌ CHANNEL_ID не установлен! Проверьте переменные окружения.");
-        }
-
-        System.out.println("✅ Бот инициализирован");
-        System.out.println("📢 Канал: " + CHANNEL_ID);
-        System.out.println("🌐 Webhook путь: " + BOT_PATH);
-
-        startReminderScheduler();
     }
 
     @Override
@@ -73,67 +85,75 @@ public class YogaManagerBot extends TelegramWebhookBot {
 
     @Override
     public BotApiMethod<?> onWebhookUpdateReceived(Update update) {
-        System.out.println("=== NEW UPDATE ===");
+        System.out.println("=== NEW WEBHOOK UPDATE ===");
         System.out.println("Update ID: " + update.getUpdateId());
 
         try {
+            // Логируем всю информацию о update
+            if (update.hasMessage()) {
+                System.out.println("📨 Message received from: " + update.getMessage().getFrom().getUserName());
+                System.out.println("💬 Text: " + update.getMessage().getText());
+                System.out.println("🆔 Chat ID: " + update.getMessage().getChatId());
+            }
+
+            if (update.hasCallbackQuery()) {
+                System.out.println("📋 Callback query: " + update.getCallbackQuery().getData());
+            }
+
+            // Обработка текстовых сообщений
             if (update.hasMessage() && update.getMessage().hasText()) {
                 String messageText = update.getMessage().getText();
                 long chatId = update.getMessage().getChatId();
 
-                System.out.println("📨 Получено сообщение: " + messageText + " от " + chatId);
+                System.out.println("🔧 Processing message: " + messageText);
 
                 switch (messageText) {
                     case "/start":
-                        return createSendMessage(chatId, getWelcomeMessage(), createMainKeyboard());
+                        return createSimpleMessage(chatId, getWelcomeMessage());
                     case "Reminder":
-                        return createSendMessage(chatId, getReminderInfo(), createMainKeyboard());
+                        return createSimpleMessage(chatId, getReminderInfo());
                     case "Расписание":
-                        return createSendMessage(chatId, getFullScheduleText(), createMainKeyboard());
+                        return createSimpleMessage(chatId, getFullScheduleText());
                     case "Сегодня":
-                        return createSendMessage(chatId, getTodaySchedule(), createMainKeyboard());
+                        return createSimpleMessage(chatId, getTodaySchedule());
                     case "Завтра":
-                        return createSendMessage(chatId, getTomorrowScheduleForUser(), createMainKeyboard());
+                        return createSimpleMessage(chatId, getTomorrowScheduleForUser());
                     case "Тест напоминания":
                         sendTestReminder();
-                        return createSendMessage(chatId, "✅ Тестовое напоминание отправлено в канал!", createMainKeyboard());
+                        return createSimpleMessage(chatId, "✅ Тестовое напоминание отправлено в канал!");
                     default:
-                        return createSendMessage(chatId, "Выберите действие:", createMainKeyboard());
+                        return createSimpleMessage(chatId, "Выберите действие из меню ниже:");
                 }
             }
-            // Добавляем обработку callback queries здесь
+
+            // Обработка callback queries
             else if (update.hasCallbackQuery()) {
                 String callbackData = update.getCallbackQuery().getData();
                 long chatId = update.getCallbackQuery().getMessage().getChatId();
+                return createSimpleMessage(chatId, "Callback received: " + callbackData);
+            }
 
-                System.out.println("📋 Callback query: " + callbackData + " от " + chatId);
-
-                // Обрабатываем callback данные
-                return new SendMessage(String.valueOf(chatId), "Получен callback: " + callbackData);
-            }
-            // Добавляем обработку других типов updates
-            else if (update.hasChannelPost()) {
-                System.out.println("📢 Channel post received");
-            }
-            else if (update.hasEditedMessage()) {
-                System.out.println("✏️ Edited message received");
-            }
+            // Для других типов сообщений
             else {
-                System.out.println("🔍 Unknown update type: " + update);
+                System.out.println("🔍 Unhandled update type");
+                if (update.hasMessage()) {
+                    return createSimpleMessage(update.getMessage().getChatId(),
+                            "Я понимаю только текстовые сообщения 😊");
+                }
             }
 
         } catch (Exception e) {
-            System.err.println("❌ Ошибка обработки сообщения: " + e.getMessage());
+            System.err.println("❌ Ошибка обработки webhook update: " + e.getMessage());
             e.printStackTrace();
 
-            // Возвращаем сообщение об ошибке вместо null
+            // Возвращаем простое сообщение об ошибке
             try {
                 if (update.hasMessage()) {
-                    return new SendMessage(update.getMessage().getChatId().toString(),
+                    return createSimpleMessage(update.getMessage().getChatId(),
                             "⚠️ Произошла ошибка обработки запроса");
                 } else if (update.hasCallbackQuery()) {
-                    return new SendMessage(update.getCallbackQuery().getMessage().getChatId().toString(),
-                            "⚠️ Произошла ошибка обработки callback");
+                    return createSimpleMessage(update.getCallbackQuery().getMessage().getChatId(),
+                            "⚠️ Ошибка обработки callback");
                 }
             } catch (Exception ex) {
                 System.err.println("❌ Ошибка создания сообщения об ошибке: " + ex.getMessage());
@@ -143,8 +163,29 @@ public class YogaManagerBot extends TelegramWebhookBot {
         return null;
     }
 
+    private SendMessage createSimpleMessage(long chatId, String text) {
+        try {
+            SendMessage message = new SendMessage();
+            message.setChatId(String.valueOf(chatId));
+            message.setText(text);
+
+            // Добавляем клавиатуру для основных команд
+            message.setReplyMarkup(createMainKeyboard());
+
+            return message;
+        } catch (Exception e) {
+            System.err.println("❌ Ошибка создания сообщения: " + e.getMessage());
+            return null;
+        }
+    }
+
     private String getWelcomeMessage() {
-        return "Привет, я твой помощник в планировании йога-занятий! 🧘‍♀️\n\nС чем тебе помочь?";
+        return "Привет! Я твой помощник в планировании йога-занятий! 🧘‍♀️\n\n" +
+                "С помощью меня ты можешь:\n" +
+                "• 📅 Посмотреть расписание\n" +
+                "• 🔔 Получить напоминания\n" +
+                "• 📋 Узнать о занятиях сегодня/завтра\n\n" +
+                "Выбери действие из меню ниже:";
     }
 
     private String getReminderInfo() {
@@ -204,54 +245,56 @@ public class YogaManagerBot extends TelegramWebhookBot {
     }
 
     private void sendTestReminder() {
-        String tomorrowSchedule = getTomorrowSchedule();
-        String testReminder;
+        try {
+            String tomorrowSchedule = getTomorrowSchedule();
+            String testReminder;
 
-        if (tomorrowSchedule.contains("Официально!!! Отдых")) {
-            testReminder = "🔔 ТЕСТ: Завтра отдых!\n\n" +
-                    tomorrowSchedule +
-                    "\n\nНаслаждайтесь свободным днём! 🌈";
-        } else {
-            testReminder = "🔔 ТЕСТ: Напоминание о завтрашних занятиях!\n\n" +
-                    tomorrowSchedule +
-                    "\n\nНе забудьте записаться! 🧘‍♀️";
+            if (tomorrowSchedule.contains("Официально!!! Отдых")) {
+                testReminder = "🔔 ТЕСТ: Завтра отдых!\n\n" +
+                        tomorrowSchedule +
+                        "\n\nНаслаждайтесь свободным днём! 🌈";
+            } else {
+                testReminder = "🔔 ТЕСТ: Напоминание о завтрашних занятиях!\n\n" +
+                        tomorrowSchedule +
+                        "\n\nНе забудьте записаться! 🧘‍♀️";
+            }
+
+            sendMessageToChannel(testReminder);
+            System.out.println("✅ Тестовое напоминание отправлено");
+        } catch (Exception e) {
+            System.err.println("❌ Ошибка отправки тестового напоминания: " + e.getMessage());
         }
-
-        sendMessageToChannel(testReminder);
-    }
-
-    private SendMessage createSendMessage(long chatId, String text, ReplyKeyboardMarkup keyboard) {
-        SendMessage message = new SendMessage();
-        message.setChatId(String.valueOf(chatId));
-        message.setText(text);
-        message.setReplyMarkup(keyboard);
-        return message;
     }
 
     private ReplyKeyboardMarkup createMainKeyboard() {
-        ReplyKeyboardMarkup keyboardMarkup = new ReplyKeyboardMarkup();
-        List<KeyboardRow> keyboard = new ArrayList<>();
+        try {
+            ReplyKeyboardMarkup keyboardMarkup = new ReplyKeyboardMarkup();
+            List<KeyboardRow> keyboard = new ArrayList<>();
 
-        KeyboardRow row1 = new KeyboardRow();
-        row1.add("Reminder");
-        row1.add("Расписание");
+            KeyboardRow row1 = new KeyboardRow();
+            row1.add("Расписание");
+            row1.add("Сегодня");
 
-        KeyboardRow row2 = new KeyboardRow();
-        row2.add("Сегодня");
-        row2.add("Завтра");
+            KeyboardRow row2 = new KeyboardRow();
+            row2.add("Завтра");
+            row2.add("Reminder");
 
-        KeyboardRow row3 = new KeyboardRow();
-        row3.add("Тест напоминания");
+            KeyboardRow row3 = new KeyboardRow();
+            row3.add("Тест напоминания");
 
-        keyboard.add(row1);
-        keyboard.add(row2);
-        keyboard.add(row3);
+            keyboard.add(row1);
+            keyboard.add(row2);
+            keyboard.add(row3);
 
-        keyboardMarkup.setKeyboard(keyboard);
-        keyboardMarkup.setResizeKeyboard(true);
-        keyboardMarkup.setOneTimeKeyboard(false);
+            keyboardMarkup.setKeyboard(keyboard);
+            keyboardMarkup.setResizeKeyboard(true);
+            keyboardMarkup.setOneTimeKeyboard(false);
 
-        return keyboardMarkup;
+            return keyboardMarkup;
+        } catch (Exception e) {
+            System.err.println("❌ Ошибка создания клавиатуры: " + e.getMessage());
+            return null;
+        }
     }
 
     private int getDayOfWeekIndex(Calendar calendar) {
@@ -260,29 +303,33 @@ public class YogaManagerBot extends TelegramWebhookBot {
     }
 
     private void startReminderScheduler() {
-        reminderTimer = new Timer();
+        try {
+            reminderTimer = new Timer();
 
-        Calendar time = Calendar.getInstance();
-        time.set(Calendar.HOUR_OF_DAY, 9);
-        time.set(Calendar.MINUTE, 0);
-        time.set(Calendar.SECOND, 0);
+            Calendar time = Calendar.getInstance();
+            time.set(Calendar.HOUR_OF_DAY, 9);
+            time.set(Calendar.MINUTE, 0);
+            time.set(Calendar.SECOND, 0);
 
-        if (time.before(Calendar.getInstance())) {
-            time.add(Calendar.DAY_OF_MONTH, 1);
-        }
-
-        System.out.println("⏰ Напоминания запланированы на: " + time.getTime());
-
-        reminderTimer.schedule(new TimerTask() {
-            @Override
-            public void run() {
-                try {
-                    checkAndSendReminders();
-                } catch (Exception e) {
-                    System.err.println("❌ Ошибка в планировщике: " + e.getMessage());
-                }
+            if (time.before(Calendar.getInstance())) {
+                time.add(Calendar.DAY_OF_MONTH, 1);
             }
-        }, time.getTime(), 24 * 60 * 60 * 1000);
+
+            System.out.println("⏰ Напоминания запланированы на: " + time.getTime());
+
+            reminderTimer.schedule(new TimerTask() {
+                @Override
+                public void run() {
+                    try {
+                        checkAndSendReminders();
+                    } catch (Exception e) {
+                        System.err.println("❌ Ошибка в планировщике: " + e.getMessage());
+                    }
+                }
+            }, time.getTime(), 24 * 60 * 60 * 1000);
+        } catch (Exception e) {
+            System.err.println("❌ Ошибка запуска планировщика: " + e.getMessage());
+        }
     }
 
     private String getNextReminderTime() {
@@ -360,7 +407,7 @@ public class YogaManagerBot extends TelegramWebhookBot {
             message.setText(text);
 
             execute(message);
-            System.out.println("✅ Сообщение отправлено в канал: " + text.substring(0, Math.min(50, text.length())) + "...");
+            System.out.println("✅ Сообщение отправлено в канал");
         } catch (TelegramApiException e) {
             System.err.println("❌ Ошибка отправки в канал: " + e.getMessage());
         }

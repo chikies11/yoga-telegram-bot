@@ -27,6 +27,11 @@ public class WebhookServer {
                 botPath = "yoga-bot-webhook";
             }
 
+            System.out.println("🚀 Starting Yoga Telegram Bot...");
+            System.out.println("📍 Port: " + port);
+            System.out.println("🌐 External URL: " + externalUrl);
+            System.out.println("🛣️ Bot path: " + botPath);
+
             // Создаем объект SetWebhook с внешним URL
             SetWebhook setWebhook = SetWebhook.builder()
                     .url(externalUrl + "/" + botPath)
@@ -47,8 +52,8 @@ public class WebhookServer {
             System.out.println("⏰ Напоминания будут отправляться каждый день в 9:00");
             System.out.println("🚀 Бот готов к работе!");
 
-        } catch (TelegramApiException e) {
-            System.err.println("❌ Ошибка запуска бота: " + e.getMessage());
+        } catch (Exception e) {
+            System.err.println("❌ Фатальная ошибка запуска бота: " + e.getMessage());
             e.printStackTrace();
             System.exit(1);
         }
