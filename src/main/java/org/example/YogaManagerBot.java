@@ -1,15 +1,13 @@
 package org.example;
 
-import org.telegram.telegrambots.bots.TelegramWebhookBot;
-import org.telegram.telegrambots.meta.api.methods.BotApiMethod;
+import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.objects.Update;
+import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 
-public class YogaManagerBot extends TelegramWebhookBot {
+import java.util.List;
 
-    public YogaManagerBot() {
-        System.out.println("🎯 YogaManagerBot constructor called!");
-    }
+public class YogaManagerBot extends TelegramLongPollingBot {
 
     @Override
     public String getBotUsername() {
@@ -19,52 +17,37 @@ public class YogaManagerBot extends TelegramWebhookBot {
     @Override
     public String getBotToken() {
         String token = System.getenv("BOT_TOKEN");
-        if (token == null) {
-            token = "dummy-token-for-testing";
-            System.err.println("⚠️ BOT_TOKEN not found in environment");
-        }
-        System.out.println("🔑 Using token length: " + token.length());
+        if (token == null) token = "dummy-token";
         return token;
     }
 
     @Override
-    public String getBotPath() {
-        return "yoga-bot-webhook";
+    public void onUpdateReceived(Update update) {
+        System.out.println("🎯 Update received in LONG POLLING mode!");
+
+        if (update.hasMessage() && update.getMessage().hasText()) {
+            String text = update.getMessage().getText();
+            String chatId = update.getMessage().getChatId().toString();
+
+            System.out.println("📨 Message: " + text + " from: " + chatId);
+
+            SendMessage response = new SendMessage();
+            response.setChatId(chatId);
+            response.setText("✅ Long polling works! You said: " + text);
+
+            try {
+                execute(response);
+                System.out.println("✅ Response sent!");
+            } catch (TelegramApiException e) {
+                System.err.println("❌ Error sending response: " + e.getMessage());
+            }
+        }
     }
 
     @Override
-    public BotApiMethod<?> onWebhookUpdateReceived(Update update) {
-        System.out.println("🎯 onWebhookUpdateReceived CALLED!");
-
-        try {
-            if (update == null) {
-                System.out.println("⚠️ Update is null");
-                return null;
-            }
-
-            System.out.println("📦 Update ID: " + update.getUpdateId());
-
-            if (update.hasMessage() && update.getMessage().hasText()) {
-                String text = update.getMessage().getText();
-                String chatId = update.getMessage().getChatId().toString();
-
-                System.out.println("📨 Received: " + text);
-                System.out.println("👤 Chat ID: " + chatId);
-
-                SendMessage response = new SendMessage();
-                response.setChatId(chatId);
-                response.setText("✅ Bot works! You said: " + text);
-
-                System.out.println("✅ Response created");
-                return response;
-            }
-
-            return null;
-
-        } catch (Exception e) {
-            System.err.println("💥 ERROR: " + e.getMessage());
-            e.printStackTrace();
-            return null;
+    public void onUpdatesReceived(List<Update> updates) {
+        for (Update update : updates) {
+            onUpdateReceived(update);
         }
     }
 }
