@@ -73,6 +73,9 @@ public class YogaManagerBot extends TelegramWebhookBot {
 
     @Override
     public BotApiMethod<?> onWebhookUpdateReceived(Update update) {
+        System.out.println("=== NEW UPDATE ===");
+        System.out.println("Update ID: " + update.getUpdateId());
+
         try {
             if (update.hasMessage() && update.getMessage().hasText()) {
                 String messageText = update.getMessage().getText();
@@ -98,9 +101,45 @@ public class YogaManagerBot extends TelegramWebhookBot {
                         return createSendMessage(chatId, "Выберите действие:", createMainKeyboard());
                 }
             }
+            // Добавляем обработку callback queries здесь
+            else if (update.hasCallbackQuery()) {
+                String callbackData = update.getCallbackQuery().getData();
+                long chatId = update.getCallbackQuery().getMessage().getChatId();
+
+                System.out.println("📋 Callback query: " + callbackData + " от " + chatId);
+
+                // Обрабатываем callback данные
+                return new SendMessage(String.valueOf(chatId), "Получен callback: " + callbackData);
+            }
+            // Добавляем обработку других типов updates
+            else if (update.hasChannelPost()) {
+                System.out.println("📢 Channel post received");
+            }
+            else if (update.hasEditedMessage()) {
+                System.out.println("✏️ Edited message received");
+            }
+            else {
+                System.out.println("🔍 Unknown update type: " + update);
+            }
+
         } catch (Exception e) {
             System.err.println("❌ Ошибка обработки сообщения: " + e.getMessage());
+            e.printStackTrace();
+
+            // Возвращаем сообщение об ошибке вместо null
+            try {
+                if (update.hasMessage()) {
+                    return new SendMessage(update.getMessage().getChatId().toString(),
+                            "⚠️ Произошла ошибка обработки запроса");
+                } else if (update.hasCallbackQuery()) {
+                    return new SendMessage(update.getCallbackQuery().getMessage().getChatId().toString(),
+                            "⚠️ Произошла ошибка обработки callback");
+                }
+            } catch (Exception ex) {
+                System.err.println("❌ Ошибка создания сообщения об ошибке: " + ex.getMessage());
+            }
         }
+
         return null;
     }
 
