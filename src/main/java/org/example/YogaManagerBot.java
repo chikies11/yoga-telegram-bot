@@ -18,12 +18,12 @@ public class YogaManagerBot extends TelegramWebhookBot {
 
     @Override
     public String getBotToken() {
-        // Используем реальный токен из переменных окружения
         String token = System.getenv("BOT_TOKEN");
         if (token == null) {
-            token = "dummy-token";
+            token = "dummy-token-for-testing";
             System.err.println("⚠️ BOT_TOKEN not found in environment");
         }
+        System.out.println("🔑 Using token length: " + token.length());
         return token;
     }
 
@@ -34,7 +34,7 @@ public class YogaManagerBot extends TelegramWebhookBot {
 
     @Override
     public BotApiMethod<?> onWebhookUpdateReceived(Update update) {
-        System.out.println("🎯 onWebhookUpdateReceived CALLED! Update ID: " + update.getUpdateId());
+        System.out.println("🎯 onWebhookUpdateReceived CALLED!");
 
         try {
             if (update == null) {
@@ -42,32 +42,27 @@ public class YogaManagerBot extends TelegramWebhookBot {
                 return null;
             }
 
-            System.out.println("📦 Update content: " + update.toString());
+            System.out.println("📦 Update ID: " + update.getUpdateId());
 
-            if (update.hasMessage()) {
-                System.out.println("💬 Has message: true");
-                if (update.getMessage().hasText()) {
-                    String text = update.getMessage().getText();
-                    String chatId = update.getMessage().getChatId().toString();
+            if (update.hasMessage() && update.getMessage().hasText()) {
+                String text = update.getMessage().getText();
+                String chatId = update.getMessage().getChatId().toString();
 
-                    System.out.println("📨 Received text: " + text);
-                    System.out.println("👤 Chat ID: " + chatId);
+                System.out.println("📨 Received: " + text);
+                System.out.println("👤 Chat ID: " + chatId);
 
-                    // Простейший ответ
-                    SendMessage response = new SendMessage();
-                    response.setChatId(chatId);
-                    response.setText("✅ Bot is working! Received: " + text);
+                SendMessage response = new SendMessage();
+                response.setChatId(chatId);
+                response.setText("✅ Bot works! You said: " + text);
 
-                    System.out.println("✅ Response created successfully");
-                    return response;
-                }
+                System.out.println("✅ Response created");
+                return response;
             }
 
-            System.out.println("❓ Update type not handled");
             return null;
 
         } catch (Exception e) {
-            System.err.println("💥 ERROR in onWebhookUpdateReceived: " + e.getMessage());
+            System.err.println("💥 ERROR: " + e.getMessage());
             e.printStackTrace();
             return null;
         }
