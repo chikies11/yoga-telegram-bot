@@ -103,14 +103,29 @@ public class YogaManagerBot extends TelegramLongPollingBot {
         if (userName.trim().isEmpty()) {
             userName = callbackQuery.getFrom().getUserName();
         }
-        int messageId = callbackQuery.getMessage().getMessageId();
-        long chatId = callbackQuery.getMessage().getChatId();
 
         System.out.println("🔘 Callback: " + callbackData + " from: " + userId + " (" + userName + ")");
 
-        if (callbackData.startsWith("register_")) {
-            String className = callbackData.substring(9);
-            toggleRegistration(userId, userName, className, messageId, chatId);
+        // Безопасное получение messageId и chatId
+        if (callbackQuery.getMessage() == null) {
+            System.err.println("❌ Message is null in callback query");
+            answerCallbackQuery("❌ Ошибка: сообщение не найдено", userId);
+            return;
+        }
+
+        try {
+            org.telegram.telegrambots.meta.api.objects.Message message =
+                    (org.telegram.telegrambots.meta.api.objects.Message) callbackQuery.getMessage();
+            int messageId = message.getMessageId();
+            long chatId = message.getChatId();
+
+            if (callbackData.startsWith("register_")) {
+                String className = callbackData.substring(9);
+                toggleRegistration(userId, userName, className, messageId, chatId);
+            }
+        } catch (ClassCastException e) {
+            System.err.println("❌ Cannot cast MaybeInaccessibleMessage to Message: " + e.getMessage());
+            answerCallbackQuery("❌ Ошибка формата сообщения", userId);
         }
     }
 
