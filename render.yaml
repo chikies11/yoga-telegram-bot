@@ -14,4 +14,12 @@ services:
         fromSecret: true
       - key: BOT_PATH
         value: "yoga-bot-webhook"
+      - key: RENDER_EXTERNAL_URL
+        fromService:
+          type: web
+          name: yoga-telegram-bot
     healthCheckPath: /health
+    # Увеличиваем таймауты
+    healthCheckTimeout: 120s
+    # Предотвращаем сон сервиса
+    autoDeploy: true

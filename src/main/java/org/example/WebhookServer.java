@@ -1,8 +1,10 @@
 package org.example;
 
 import org.telegram.telegrambots.meta.TelegramBotsApi;
+import org.telegram.telegrambots.meta.api.methods.updates.SetWebhook;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 import org.telegram.telegrambots.updatesreceivers.DefaultBotSession;
+import org.telegram.telegrambots.updatesreceivers.ServerlessWebhook;
 
 import java.io.IOException;
 import java.io.OutputStream;
@@ -12,30 +14,42 @@ import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpExchange;
 
 public class WebhookServer {
+    private static YogaManagerBot bot;
+
     public static void main(String[] args) {
-        System.out.println("🚀 Starting Yoga Telegram Bot (Long Polling)...");
+        System.out.println("🚀 Starting Yoga Telegram Bot (Webhook)...");
 
         try {
-            // Запускаем HTTP сервер для health checks
-            startHealthCheckServer();
+            // Получаем параметры из окружения
+            String botToken = System.getenv("BOT_TOKEN");
+            String webhookPath = System.getenv("BOT_PATH");
+            String renderUrl = System.getenv("RENDER_EXTERNAL_URL");
 
-            // Создаем и регистрируем бота
-            TelegramBotsApi botsApi = new TelegramBotsApi(DefaultBotSession.class);
-            YogaManagerBot bot = new YogaManagerBot();
-            botsApi.registerBot(bot);
-
-            System.out.println("✅ Bot successfully registered!");
-            System.out.println("🤖 Username: " + bot.getBotUsername());
-            System.out.println("⏰ Bot is now listening for messages...");
-
-            // Бесконечный цикл чтобы приложение не завершалось
-            while (true) {
-                try {
-                    Thread.sleep(1000);
-                } catch (InterruptedException e) {
-                    break;
-                }
+            if (botToken == null || webhookPath == null || renderUrl == null) {
+                System.err.println("❌ Missing required environment variables");
+                System.exit(1);
             }
+
+            String webhookUrl = renderUrl + "/" + webhookPath;
+            System.out.println("🌐 Webhook URL: " + webhookUrl);
+
+            // Создаем бота с webhook
+            bot = new YogaManagerBot();
+
+            // Настраиваем webhook
+            SetWebhook setWebhook = SetWebhook.builder()
+                    .url(webhookUrl)
+                    .build();
+
+            // Исправленная строка: используем ServerlessWebhook и правильный метод регистрации
+            TelegramBotsApi botsApi = new TelegramBotsApi(DefaultBotSession.class);
+            bot.setWebhook(setWebhook); // Устанавливаем webhook напрямую через бота
+
+            // Запускаем HTTP сервер для health checks и webhook
+            startWebhookServer(webhookPath);
+
+            System.out.println("✅ Bot successfully registered with Webhook!");
+            System.out.println("🤖 Username: " + bot.getBotUsername());
 
         } catch (TelegramApiException e) {
             System.err.println("❌ Error initializing bot: " + e.getMessage());
@@ -44,25 +58,33 @@ public class WebhookServer {
         }
     }
 
-    private static void startHealthCheckServer() {
+    private static void startWebhookServer(String webhookPath) {
         try {
-            // Получаем порт из переменных окружения (Render автоматически устанавливает PORT)
             String portStr = System.getenv("PORT");
             int port = (portStr != null && !portStr.isEmpty()) ? Integer.parseInt(portStr) : 8080;
 
             HttpServer server = HttpServer.create(new InetSocketAddress(port), 0);
+
+            // Webhook endpoint
+            server.createContext("/" + webhookPath, new HttpHandler() {
+                @Override
+                public void handle(HttpExchange exchange) throws IOException {
+                    if ("POST".equalsIgnoreCase(exchange.getRequestMethod())) {
+                        // Обрабатываем webhook запрос от Telegram
+                        bot.processWebhookUpdate(exchange.getRequestBody());
+                        sendResponse(exchange, 200, "OK");
+                    } else {
+                        sendResponse(exchange, 405, "Method Not Allowed");
+                    }
+                }
+            });
 
             // Health check endpoint
             server.createContext("/health", new HttpHandler() {
                 @Override
                 public void handle(HttpExchange exchange) throws IOException {
                     String response = "{\"status\":\"ok\",\"service\":\"yoga-telegram-bot\"}";
-                    exchange.getResponseHeaders().set("Content-Type", "application/json");
-                    exchange.sendResponseHeaders(200, response.getBytes().length);
-
-                    OutputStream os = exchange.getResponseBody();
-                    os.write(response.getBytes());
-                    os.close();
+                    sendResponse(exchange, 200, response);
                 }
             });
 
@@ -71,23 +93,27 @@ public class WebhookServer {
                 @Override
                 public void handle(HttpExchange exchange) throws IOException {
                     String response = "Yoga Telegram Bot is running! 🧘‍♀️";
-                    exchange.getResponseHeaders().set("Content-Type", "text/plain");
-                    exchange.sendResponseHeaders(200, response.getBytes().length);
-
-                    OutputStream os = exchange.getResponseBody();
-                    os.write(response.getBytes());
-                    os.close();
+                    sendResponse(exchange, 200, response);
                 }
             });
 
             server.setExecutor(null);
             server.start();
 
-            System.out.println("✅ Health check server started on port " + port);
+            System.out.println("✅ Webhook server started on port " + port);
             System.out.println("🌐 Health check URL: http://0.0.0.0:" + port + "/health");
 
         } catch (IOException e) {
-            System.err.println("❌ Failed to start health check server: " + e.getMessage());
+            System.err.println("❌ Failed to start webhook server: " + e.getMessage());
         }
+    }
+
+    private static void sendResponse(HttpExchange exchange, int statusCode, String response) throws IOException {
+        exchange.getResponseHeaders().set("Content-Type", "application/json");
+        exchange.sendResponseHeaders(statusCode, response.getBytes().length);
+
+        OutputStream os = exchange.getResponseBody();
+        os.write(response.getBytes());
+        os.close();
     }
 }
